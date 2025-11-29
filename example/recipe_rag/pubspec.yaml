@@ -1,0 +1,17 @@
+name: recipe_rag
+description: A simple RAG service for recipes.
+version: 1.0.0
+publish_to: none
+
+environment:
+  sdk: ^3.7.0
+
+dependencies:
+  args: ^2.4.2
+  google_cloud_ai_generativelanguage_v1beta: ^0.2.0
+  http: ^1.2.0
+  shelf: ^1.4.1
+  shelf_router: ^1.1.4
+
+dev_dependencies:
+  lints: ^6.0.0

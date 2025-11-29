@@ -27,6 +27,7 @@ dependencies:
   firebase_core: ^4.0.0
   firebase_ai: ^3.0.0
   cross_file: ^0.3.4+2
+  http: ^1.2.0
 
 dev_dependencies:
   flutter_test:

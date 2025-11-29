@@ -53,7 +53,9 @@ class RecipeResponseView extends StatelessWidget {
           ),
         );
       }
-    } catch (e) {
+    } on FormatException catch (_) {
+      // assume partial JSON response
+    } on Exception catch (e) {
       debugPrint('Error parsing response: $e');
     }
 
@@ -61,7 +63,9 @@ class RecipeResponseView extends StatelessWidget {
       try {
         final map = jsonDecode(response);
         finalText = map['text'] as String?;
-      } catch (e) {
+      } on FormatException catch (_) {
+        // assume partial JSON response
+      } on Exception catch (e) {
         debugPrint('Error parsing response: $e');
         finalText = response;
       }

@@ -1,7 +1,11 @@
+import 'dart:convert';
+import 'dart:developer' as dev show log;
+
 import 'package:firebase_ai/firebase_ai.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_ai_toolkit/flutter_ai_toolkit.dart';
 import 'package:go_router/go_router.dart';
+import 'package:http/http.dart' as http;
 
 import '../data/recipe_repository.dart';
 import '../data/settings.dart';
@@ -27,7 +31,21 @@ class _HomePageState extends State<HomePage> {
   LlmProvider _createProvider([List<ChatMessage>? history]) => FirebaseProvider(
     history: history,
     model: FirebaseAI.googleAI().generativeModel(
-      model: 'gemini-2.0-flash',
+      model: 'gemini-2.5-flash',
+      tools: [
+        Tool.functionDeclarations([
+          FunctionDeclaration(
+            'recipeLookup',
+            'Look up recipes from the local RAG service.',
+            parameters: {
+              'query': Schema(
+                SchemaType.string,
+                description: 'The search query for recipes.',
+              ),
+            },
+          ),
+        ]),
+      ],
       generationConfig: GenerationConfig(
         responseMimeType: 'application/json',
         responseSchema: Schema(
@@ -66,6 +84,10 @@ You are a helpful assistant that generates recipes based on the ingredients and
 instructions provided as well as my food preferences, which are as follows:
 ${Settings.foodPreferences.isEmpty ? 'I don\'t have any food preferences' : Settings.foodPreferences}
 
+You have access to a tool `recipeLookup` that can search for recipes in a local 
+database. Use this tool to find recipes that match the user's query before 
+starting to generate your own recipes.
+
 You should keep things casual and friendly. You may generate multiple recipes in
 a single response, but only if asked. Generate each response in JSON format
 with the following schema, including one or more "text" and "recipe" pairs as
@@ -88,6 +110,7 @@ well as any trailing text commentary you care to provide:
 }
 '''),
     ),
+    onFunctionCall: _onFunctionCall,
   );
 
   final _welcomeMessage =
@@ -141,4 +164,26 @@ well as any trailing text commentary you care to provide:
     final history = _provider.history.toList();
     _provider = _createProvider(history);
   });
+
+  Future<Map<String, Object?>?> _onFunctionCall(
+    FunctionCall functionCall,
+  ) async {
+    dev.log('Function call: ${functionCall.name}');
+    if (functionCall.name == 'recipeLookup') {
+      final query = functionCall.args['query'] as String;
+      try {
+        final response = await http.get(
+          Uri.parse('http://localhost:9999/search?q=$query'),
+        );
+        if (response.statusCode == 200) {
+          return {'result': jsonDecode(response.body)};
+        } else {
+          return {'error': 'Failed to lookup recipes: ${response.body}'};
+        }
+      } catch (e) {
+        return {'error': 'Exception during recipe lookup: $e'};
+      }
+    }
+    throw Exception('Unknown function call: ${functionCall.name}');
+  }
 }
