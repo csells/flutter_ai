@@ -24,8 +24,50 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   String _searchText = '';
-
   late LlmProvider _provider = _createProvider();
+
+  static final _recipeLookupTool = FunctionDeclaration(
+    'recipeLookup',
+    'Look up recipes from the local RAG service.',
+    parameters: {
+      'query': Schema(
+        SchemaType.string,
+        description: 'The search query for recipes.',
+      ),
+    },
+  );
+
+  static final _returnResultTool = FunctionDeclaration(
+    'returnResult',
+    'Returns the generated recipes and commentary.',
+    parameters: {
+      'recipes': Schema(
+        SchemaType.array,
+        items: Schema(
+          SchemaType.object,
+          properties: {
+            'text': Schema(SchemaType.string),
+            'recipe': Schema(
+              SchemaType.object,
+              properties: {
+                'title': Schema(SchemaType.string),
+                'description': Schema(SchemaType.string),
+                'ingredients': Schema(
+                  SchemaType.array,
+                  items: Schema(SchemaType.string),
+                ),
+                'instructions': Schema(
+                  SchemaType.array,
+                  items: Schema(SchemaType.string),
+                ),
+              },
+            ),
+          },
+        ),
+      ),
+      'text': Schema(SchemaType.string),
+    },
+  );
 
   // create a new provider with the given history and the current settings
   LlmProvider _createProvider([List<ChatMessage>? history]) => FirebaseProvider(
@@ -33,49 +75,7 @@ class _HomePageState extends State<HomePage> {
     model: FirebaseAI.googleAI().generativeModel(
       model: 'gemini-2.5-flash',
       tools: [
-        Tool.functionDeclarations([
-          FunctionDeclaration(
-            'recipeLookup',
-            'Look up recipes from the local RAG service.',
-            parameters: {
-              'query': Schema(
-                SchemaType.string,
-                description: 'The search query for recipes.',
-              ),
-            },
-          ),
-          FunctionDeclaration(
-            'returnResult',
-            'Returns the generated recipes and commentary.',
-            parameters: {
-              'recipes': Schema(
-                SchemaType.array,
-                items: Schema(
-                  SchemaType.object,
-                  properties: {
-                    'text': Schema(SchemaType.string),
-                    'recipe': Schema(
-                      SchemaType.object,
-                      properties: {
-                        'title': Schema(SchemaType.string),
-                        'description': Schema(SchemaType.string),
-                        'ingredients': Schema(
-                          SchemaType.array,
-                          items: Schema(SchemaType.string),
-                        ),
-                        'instructions': Schema(
-                          SchemaType.array,
-                          items: Schema(SchemaType.string),
-                        ),
-                      },
-                    ),
-                  },
-                ),
-              ),
-              'text': Schema(SchemaType.string),
-            },
-          ),
-        ]),
+        Tool.functionDeclarations([_recipeLookupTool, _returnResultTool]),
       ],
       systemInstruction: Content.system('''
 You are a helpful assistant that generates recipes based on the ingredients and 
@@ -91,21 +91,9 @@ The tool will return the JSON data. You must then output this JSON data exactly 
 Do not output any other text before or after the JSON.
 
 Structure your call to `returnResult` as follows:
-{
-  "recipes": [
-    {
-      "text": "Any commentary you care to provide about the recipe.",
-      "recipe":
-      {
-        "title": "Recipe Title",
-        "description": "Recipe Description",
-        "ingredients": ["Ingredient 1", "Ingredient 2", "Ingredient 3"],
-        "instructions": ["Instruction 1", "Instruction 2", "Instruction 3"]
-      }
-    }
-  ],
-  "text": "any final commentary you care to provide"
-}
+```json
+${jsonEncode(_returnResultTool.toJson())}
+```
 '''),
     ),
     onFunctionCall: _onFunctionCall,
