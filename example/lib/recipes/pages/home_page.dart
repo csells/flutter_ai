@@ -44,55 +44,53 @@ class _HomePageState extends State<HomePage> {
               ),
             },
           ),
+          FunctionDeclaration(
+            'returnResult',
+            'Returns the generated recipes and commentary.',
+            parameters: {
+              'recipes': Schema(
+                SchemaType.array,
+                items: Schema(
+                  SchemaType.object,
+                  properties: {
+                    'text': Schema(SchemaType.string),
+                    'recipe': Schema(
+                      SchemaType.object,
+                      properties: {
+                        'title': Schema(SchemaType.string),
+                        'description': Schema(SchemaType.string),
+                        'ingredients': Schema(
+                          SchemaType.array,
+                          items: Schema(SchemaType.string),
+                        ),
+                        'instructions': Schema(
+                          SchemaType.array,
+                          items: Schema(SchemaType.string),
+                        ),
+                      },
+                    ),
+                  },
+                ),
+              ),
+              'text': Schema(SchemaType.string),
+            },
+          ),
         ]),
       ],
-      generationConfig: GenerationConfig(
-        responseMimeType: 'application/json',
-        responseSchema: Schema(
-          SchemaType.object,
-          properties: {
-            'recipes': Schema(
-              SchemaType.array,
-              items: Schema(
-                SchemaType.object,
-                properties: {
-                  'text': Schema(SchemaType.string),
-                  'recipe': Schema(
-                    SchemaType.object,
-                    properties: {
-                      'title': Schema(SchemaType.string),
-                      'description': Schema(SchemaType.string),
-                      'ingredients': Schema(
-                        SchemaType.array,
-                        items: Schema(SchemaType.string),
-                      ),
-                      'instructions': Schema(
-                        SchemaType.array,
-                        items: Schema(SchemaType.string),
-                      ),
-                    },
-                  ),
-                },
-              ),
-            ),
-            'text': Schema(SchemaType.string),
-          },
-        ),
-      ),
       systemInstruction: Content.system('''
 You are a helpful assistant that generates recipes based on the ingredients and 
 instructions provided as well as my food preferences, which are as follows:
 ${Settings.foodPreferences.isEmpty ? 'I don\'t have any food preferences' : Settings.foodPreferences}
 
-You have access to a tool `recipeLookup` that can search for recipes in a local 
-database. Use this tool to find recipes that match the user's query before 
-starting to generate your own recipes.
+You have access to a tool `recipeLookup` that can search for recipes in a local database. 
+If the user asks for a specific type of recipe (e.g., "pasta recipes"), use this tool to find relevant recipes.
 
-You should keep things casual and friendly. You may generate multiple recipes in
-a single response, but only if asked. Generate each response in JSON format
-with the following schema, including one or more "text" and "recipe" pairs as
-well as any trailing text commentary you care to provide:
+When you are ready to provide the recipes, you MUST use the `returnResult` tool.
+Pass the recipes and commentary to this tool.
+The tool will return the JSON data. You must then output this JSON data exactly as your text response.
+Do not output any other text before or after the JSON.
 
+Structure your call to `returnResult` as follows:
 {
   "recipes": [
     {
@@ -106,7 +104,7 @@ well as any trailing text commentary you care to provide:
       }
     }
   ],
-  "text": "any final commentary you care to provide",
+  "text": "any final commentary you care to provide"
 }
 '''),
     ),
@@ -178,11 +176,19 @@ well as any trailing text commentary you care to provide:
         if (response.statusCode == 200) {
           return {'result': jsonDecode(response.body)};
         } else {
+          dev.log(
+            'Failed to lookup recipes: ${response.statusCode} ${response.body}',
+          );
           return {'error': 'Failed to lookup recipes: ${response.body}'};
         }
       } catch (e) {
+        // Log the error so it's visible in the console
+        dev.log('Exception during recipe lookup: $e');
         return {'error': 'Exception during recipe lookup: $e'};
       }
+    } else if (functionCall.name == 'returnResult') {
+      dev.log('Returning result: ${functionCall.args}');
+      return functionCall.args;
     }
     throw Exception('Unknown function call: ${functionCall.name}');
   }

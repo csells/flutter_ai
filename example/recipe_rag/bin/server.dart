@@ -31,6 +31,7 @@ void main(List<String> args) async {
   // 3. Start Server
   final handler = Pipeline()
       .addMiddleware(logRequests())
+      .addMiddleware(_corsMiddleware())
       .addHandler(router.call);
   final server = await shelf_io.serve(handler, 'localhost', 9999);
 
@@ -212,4 +213,31 @@ double _cosineDistance(List<double> vecA, List<double> vecB) {
 
   final similarity = dotProduct / (sqrt(normA) * sqrt(normB));
   return 1.0 - similarity;
+}
+
+Middleware _corsMiddleware() {
+  return createMiddleware(
+    requestHandler: (request) {
+      if (request.method == 'OPTIONS') {
+        return Response.ok(
+          '',
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+            'Access-Control-Allow-Headers': 'Origin, Content-Type',
+          },
+        );
+      }
+      return null;
+    },
+    responseHandler: (response) {
+      return response.change(
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+          'Access-Control-Allow-Headers': 'Origin, Content-Type',
+        },
+      );
+    },
+  );
 }
