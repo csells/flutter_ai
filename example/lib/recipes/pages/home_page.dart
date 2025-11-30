@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:developer' as dev show log;
 
@@ -82,15 +83,28 @@ You are a helpful assistant that generates recipes based on the ingredients and
 instructions provided as well as my food preferences, which are as follows:
 ${Settings.foodPreferences.isEmpty ? 'I don\'t have any food preferences' : Settings.foodPreferences}
 
+### Tool: `recipeLookup`
+
 You have access to a tool `recipeLookup` that can search for recipes in a local database. 
-If the user asks for a specific type of recipe (e.g., "pasta recipes"), use this tool to find relevant recipes.
 
-When you are ready to provide the recipes, you MUST use the `returnResult` tool.
-Pass the recipes and commentary to this tool.
-The tool will return the JSON data. You must then output this JSON data exactly as your text response.
-Do not output any other text before or after the JSON.
+**When to use:**
+- If the user asks for a specific type of recipe (e.g., "pasta recipes"), use this tool to find relevant recipes.
 
-Structure your call to `returnResult` as follows:
+**Function signature:**
+```json
+${jsonEncode(_recipeLookupTool.toJson())}
+```
+
+### Tool: `returnResult`
+
+You have a tool to return the final result of the recipe generation process.
+
+**When to use:**
+- Use this tool when you have found recipes (or confirmed none were found) and are ready to present the answer.
+- You must use this tool exactly once, and only once, to return the final result.
+- Do not output any natural language text directly. ALWAYS use the `returnResult` tool to communicate with the user.
+
+**Function signature:**
 ```json
 ${jsonEncode(_returnResultTool.toJson())}
 ```
@@ -133,6 +147,7 @@ ${jsonEncode(_returnResultTool.toJson())}
           provider: _provider,
           welcomeMessage: _welcomeMessage,
           responseBuilder: (context, response) => RecipeResponseView(response),
+          messageSender: _messageSender,
         ),
       ],
     ),
@@ -151,10 +166,50 @@ ${jsonEncode(_returnResultTool.toJson())}
     _provider = _createProvider(history);
   });
 
+  String? _capturedResult;
+
+  Stream<String> _messageSender(
+    String prompt, {
+    required Iterable<Attachment> attachments,
+  }) async* {
+    _capturedResult = null;
+
+    final stream = _provider.sendMessageStream(
+      prompt,
+      attachments: attachments,
+    );
+
+    await for (final _ in stream) {
+      // consume the stream but ignore the output
+    }
+
+    if (_capturedResult != null) {
+      // Update the history with the captured result to ensure it's saved correctly
+      final history = _provider.history.toList();
+      if (history.isNotEmpty) {
+        // Create a new message with the captured result
+        final newMessage = ChatMessage(
+          origin: MessageOrigin.llm,
+          text: _capturedResult!,
+          attachments: [],
+        );
+        history[history.length - 1] = newMessage;
+        _provider.history = history;
+      }
+      yield _capturedResult!;
+    } else {
+      // If no result was captured, yield the final text from history
+      // This ensures normal chat messages are still displayed
+      final history = _provider.history;
+      if (history.isNotEmpty && history.last.origin.isLlm) {
+        yield history.last.text ?? '';
+      }
+    }
+  }
+
   Future<Map<String, Object?>?> _onFunctionCall(
     FunctionCall functionCall,
   ) async {
-    dev.log('Function call: ${functionCall.name}');
     if (functionCall.name == 'recipeLookup') {
       final query = functionCall.args['query'] as String;
       try {
@@ -175,8 +230,9 @@ ${jsonEncode(_returnResultTool.toJson())}
         return {'error': 'Exception during recipe lookup: $e'};
       }
     } else if (functionCall.name == 'returnResult') {
-      dev.log('Returning result: ${functionCall.args}');
-      return functionCall.args;
+      _capturedResult = jsonEncode(functionCall.args);
+      // Return a dummy result to satisfy the provider, though we ignore the subsequent output
+      return {'result': 'captured'};
     }
     throw Exception('Unknown function call: ${functionCall.name}');
   }
